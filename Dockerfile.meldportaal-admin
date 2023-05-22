@@ -1,0 +1,43 @@
+FROM php:8.0-apache
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive \
+      apt-get install --assume-yes --no-install-recommends \
+        git \
+        libpng-dev \
+        libpq-dev \
+        libzip-dev \
+        postgresql-client \
+        unzip \
+        zlib1g-dev \
+    && docker-php-ext-configure gd \
+    && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
+    && docker-php-ext-install \
+        gd \
+        pdo \
+        pdo_pgsql\
+        pgsql \
+        zip \
+    && apt-get -y autoremove \
+    && apt-get clean \
+    && rm -rf \
+        /tmp/* \
+        /var/lib/apt/lists/* \
+        /var/tmp/*
+
+RUN a2enmod rewrite \
+    && a2enmod ssl
+
+RUN mkdir /etc/apache2/ssl \
+ && rm /etc/apache2/sites-enabled/000-default.conf
+
+RUN pecl install xdebug
+
+RUN usermod -u 1000 www-data
+RUN usermod -G staff www-data
+
+# The `artisan db` command requires psql to run :-(
+COPY --from=postgres:12-alpine /usr/local/bin/psql /usr/local/bin/psql
+
+# Allow PHP Composer to be run from inside the Docker container
+COPY --from=composer /usr/bin/composer /usr/bin/composer

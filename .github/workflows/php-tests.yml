@@ -1,0 +1,125 @@
+name: PHP Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  composer-install:
+    runs-on: ubuntu-20.04
+
+    strategy:
+      max-parallel: 3
+      matrix:
+        php-versions: [ '8.0', '8.1', '8.2' ]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: vendor/
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+      - name: Install PHP
+        uses: shivammathur/setup-php@master
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: zip
+      - name: Install Dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.REPO_READ_ONLY_TOKEN }}"}}'
+        run: composer install --no-interaction --no-scripts --no-progress --prefer-dist
+
+  laravel-tests:
+    needs:
+      - composer-install
+    runs-on: ubuntu-20.04
+
+    strategy:
+      max-parallel: 3
+      matrix:
+        php-versions: [ '8.0', '8.1', '8.2' ]
+
+    services:
+      postgres:
+        image: postgres:12.5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_db_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install PHP
+      uses: shivammathur/setup-php@master
+      with:
+        php-version: ${{ matrix.php-versions }}
+        extensions: pcov, pgsql
+    - uses: actions/cache@v3
+      with:
+        path: vendor/
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+    - name: Copy .env
+      run: cp -n .env.example .env
+    - name: Generate key
+      run: php artisan key:generate
+    - name: Directory Permissions
+      run: chmod -R 777 storage bootstrap/cache
+    - name: Create dist folder and dummy files
+      run: mkdir dist/js && touch dist/js/app.js
+    - name: Execute tests (Unit and Feature)
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: 127.0.0.1
+        DB_PORT: 5432
+        DB_DATABASE: ci_db_test
+        DB_USERNAME: postgres
+        DB_PASSWORD: postgres
+        DB_SSLMODE: prefer
+        PUBKEY_CLIENT: ${{ secrets.PUBKEY_CLIENT }}
+        CERTIFICATE_RECIPIENT: ${{ github.workspace }}/ontvanger.pem
+        CERTIFICATE_TEST: ${{ github.workspace }}/ontvanger.pem
+        CERTIFICATE_HSM_TEST: ${{ github.workspace }}/hsm.pem
+        CERTIFICATE_YUBI_TEST: ${{ github.workspace }}/yubi.pem
+        RECIPIENT_CERTIFICATES: ${{ github.workspace }}/hsm.pem,${{ github.workspace }}/yubi.pem
+        KEY_HSM_TEST: ${{ github.workspace }}/hsm.key
+        KEY_YUBI_TEST: ${{ github.workspace }}/yubi.key
+        KEY_TEST: ${{ github.workspace }}/ontvanger.key
+        DATABASE_AT_REST_KEY: ${{ secrets.DATABASE_AT_REST_KEY }}
+      run: vendor/bin/phpunit --printer \\Tests\\ResultFilePrinter --coverage-clover meldportaal-admin_php_clover.xml
+
+    - id: phpunit-output
+      if: ${{ github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+      run: |
+        body="$(cat phpunit.out)"
+        body="${body//'%'/'%25'}"
+        body="${body//$'\n'/'%0A'}"
+        body="${body//$'\r'/'%0D'}"
+        echo "body=$body" >> $GITHUB_OUTPUT
+
+    - name: Find Comment
+      if: ${{ github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+      uses: peter-evans/find-comment@v2
+      id: fc
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: PHPUnit results
+
+    - name: Create comment
+      if: ${{ github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+      uses: peter-evans/create-or-update-comment@v3
+      with:
+        comment-id: ${{ steps.fc.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        edit-mode: replace
+        body: |
+          PHPUnit results for Continuous Integration
+          <br>
+          ${{ steps.phpunit-output.outputs.body }}
+

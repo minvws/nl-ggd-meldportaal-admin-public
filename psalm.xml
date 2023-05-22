@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="6"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="app" />
+        <directory name="database/factories" />
+        <directory name="database/seeders" />
+        <ignoreFiles>
+            <directory name="vendor" />
+        </ignoreFiles>
+    </projectFiles>
+
+    <issueHandlers>
+      <UndefinedConstant>
+        <errorLevel type="suppress">
+        </errorLevel>
+      </UndefinedConstant>
+    </issueHandlers>
+
+    <issueHandlers>
+      <UndefinedConstant>
+        <errorLevel type="suppress">
+          <file name="app/Services/PdfService.php"/>
+          <file name="app/Http/Controllers/AbstractPdfController.php"/>
+        </errorLevel>
+      </UndefinedConstant>
+    </issueHandlers>
+
+    <stubs>
+        <file name="_ide_helper.php" />
+    </stubs>
+</psalm>

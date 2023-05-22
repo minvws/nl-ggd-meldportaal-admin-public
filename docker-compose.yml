@@ -1,0 +1,53 @@
+# For more information: https://laravel.com/docs/sail
+version: '3'
+
+services:
+  meldportaal-admin:
+    build:
+      context: '.'
+      dockerfile: Dockerfile.meldportaal-admin
+    command: bash -c 'bash ./bin/check-development-environment.bash; /usr/local/bin/apache2-foreground'
+    container_name: meldportaal-admin
+    #    depends_on:
+    #  - postgres
+    hostname: meldportaal-admin.localdev
+    ports:
+      - '${APP_PORT:-462}:443'
+    tty: true
+    volumes:
+      - './meldportaal-admin.conf:/etc/apache2/sites-enabled/meldportaal-admin.conf'
+      - './ssl/:/etc/apache2/ssl/'
+      - '.:/var/www/html'
+      - './xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini'
+
+  meldportaal-admin-uzi:
+    build:
+      context: '.'
+      dockerfile: Dockerfile.meldportaal-admin
+    command: bash -c 'bash ./bin/check-development-environment.bash; /usr/local/bin/apache2-foreground'
+    container_name: meldportaal-admin-uzi
+    #    depends_on:
+    #  - postgres
+    hostname: meldportaal-admin-uzi.localdev
+    ports:
+      - '${APP_PORT_UZI:-463}:443'
+    tty: true
+    volumes:
+      - './meldportaal-admin-uzi.conf:/etc/apache2/sites-enabled/meldportaal-admin-uzi.conf'
+      - './ssl/:/etc/apache2/ssl/'
+      - '.:/var/www/html'
+      - './xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini'
+
+  postgres:
+    container_name: postgres
+    environment:
+      POSTGRES_PASSWORD: '${DB_PASSWORD}'
+      POSTGRES_USER: '${DB_USERNAME}'
+      POSTGRES_DB: '${DB_DATABASE}'
+    image: 'postgres:12'
+    networks:
+      default:
+        aliases:
+          - inge3_db
+    ports:
+      - '${FORWARD_DB_PORT:-5432}:5432'
